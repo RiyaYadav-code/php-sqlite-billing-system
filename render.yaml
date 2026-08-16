@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: php-sqlite-billing
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    disk:
+      name: billing-data
+      mountPath: /var/www/html/data
+      sizeGB: 1

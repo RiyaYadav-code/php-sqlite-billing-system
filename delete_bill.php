@@ -1,0 +1,1 @@
+<?php require_once __DIR__.'/db.php';$id=(int)($_POST['id']??0);if($id){$s=$pdo->prepare("DELETE FROM bills WHERE id=?");$s->execute([$id]);}header('Location:index.php#bills');exit;
