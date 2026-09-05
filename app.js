@@ -1,7 +1,125 @@
-let cart=[];
-function addItem(){let s=document.getElementById('productSelect'),q=+document.getElementById('qty').value;if(!s.value||q<1){alert('Select a product and valid quantity.');return}let o=s.options[s.selectedIndex],id=+s.value,p=+o.dataset.price,n=o.textContent.split(' - ')[0],x=cart.find(i=>i.id===id);if(x)x.qty+=q;else cart.push({id,name:n,price:p,qty:q});s.value='';document.getElementById('qty').value=1;renderCart()}
-function removeItem(i){cart.splice(i,1);renderCart()}function clearCart(){cart=[];renderCart()}
-function calc(){let sub=cart.reduce((a,x)=>a+x.price*x.qty,0),d=Math.min(100,Math.max(0,+document.getElementById('discount').value||0)),disc=sub*d/100,t=sub-disc,g=Math.max(0,+document.getElementById('gst').value||0),tax=t*g/100;return{sub,disc,g,tax,total:t+tax}}
-function renderCart(){let a=document.getElementById('cart');a.innerHTML=cart.length?'<table><tr><th>Product</th><th class="num">Price</th><th class="num">Qty</th><th class="num">Amount</th><th class="num">Action</th></tr>'+cart.map((x,i)=>`<tr><td>${esc(x.name)}</td><td class="num">${money(x.price)}</td><td class="num">${x.qty}</td><td class="num">${money(x.price*x.qty)}</td><td class="num"><button type="button" class="btn danger" onclick="removeItem(${i})">Remove</button></td></tr>`).join('')+'</table>':'<div class="empty">No products added.</div>';let c=calc();document.getElementById('totals').innerHTML=`<div class="r"><span>Subtotal</span><b>${money(c.sub)}</b></div><div class="r"><span>Discount</span><b>- ${money(c.disc)}</b></div><div class="r"><span>GST (${c.g}%)</span><b>${money(c.tax)}</b></div><div class="r grand"><span>Grand Total</span><b>${money(c.total)}</b></div>`}
-function prepareSubmit(){if(!cart.length){alert('Add at least one product.');return false}document.getElementById('items').value=JSON.stringify(cart);return true}
-function money(n){return '₹'+Number(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}renderCart();
+/* =====================================================
+   MODULE NAVIGATION
+   ===================================================== */
+
+function showModule(section) {
+
+    const validSections = [
+        "dashboard",
+        "billing",
+        "products",
+        "bills",
+        "reports",
+        "customers"
+    ];
+
+
+    /* Invalid section -> Dashboard */
+
+    if (!validSections.includes(section)) {
+        section = "dashboard";
+    }
+
+
+    /* Hide all modules */
+
+    document
+        .querySelectorAll(".module-section")
+        .forEach(function(sectionElement) {
+
+            sectionElement.classList.remove(
+                "active-module"
+            );
+
+        });
+
+
+    /* Show selected module */
+
+    const selected =
+        document.getElementById(section);
+
+    if (selected) {
+
+        selected.classList.add(
+            "active-module"
+        );
+
+    }
+
+
+    /* Update active navigation button */
+
+    document
+        .querySelectorAll(".module-link")
+        .forEach(function(link) {
+
+            link.classList.remove("active");
+
+        });
+
+
+    const activeLink =
+        document.querySelector(
+            '.module-link[data-section="' +
+            section +
+            '"]'
+        );
+
+
+    if (activeLink) {
+
+        activeLink.classList.add("active");
+
+    }
+
+
+    /* Change URL without reloading */
+
+    if (history.replaceState) {
+
+        history.replaceState(
+            null,
+            "",
+            "#" + section
+        );
+
+    }
+
+}
+
+
+/* Navigation click */
+
+document
+    .querySelectorAll(".module-link")
+    .forEach(function(link) {
+
+        link.addEventListener(
+            "click",
+            function(event) {
+
+                event.preventDefault();
+
+                showModule(
+                    this.dataset.section
+                );
+
+            }
+        );
+
+    });
+
+
+/* Open correct module when page loads */
+
+const initialSection =
+    document.body.dataset.activeSection ||
+    (
+        location.hash
+            ? location.hash.substring(1)
+            : "dashboard"
+    );
+
+
+showModule(initialSection);
