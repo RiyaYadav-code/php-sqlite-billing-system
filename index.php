@@ -1,5 +1,6 @@
+
 <?php
-require_once __DIR__.'/db.php';
+require_once __DIR__ . '/db.php';
 
 $products = $pdo->query("SELECT * FROM products ORDER BY name")->fetchAll();
 
@@ -27,11 +28,9 @@ if ($q !== '') {
 }
 
 $customers = $pdo->query("
-    SELECT 
-        c.name,
-        c.phone,
-        COUNT(b.id) bill_count,
-        COALESCE(SUM(b.total),0) total_purchase
+    SELECT c.name, c.phone,
+           COUNT(b.id) bill_count,
+           COALESCE(SUM(b.total),0) total_purchase
     FROM customers c
     LEFT JOIN bills b ON b.customer_id = c.id
     GROUP BY c.id
@@ -62,58 +61,40 @@ $totalProducts = (int)$pdo->query("
 ")->fetchColumn();
 
 $lowStock = (int)$pdo->query("
-    SELECT COUNT(*)
-    FROM products
+    SELECT COUNT(*) FROM products
     WHERE stock_quantity > 0
     AND stock_quantity <= low_stock_threshold
 ")->fetchColumn();
 
 $outStock = (int)$pdo->query("
-    SELECT COUNT(*)
-    FROM products
+    SELECT COUNT(*) FROM products
     WHERE stock_quantity = 0
 ")->fetchColumn();
-
-
-/* Daily report */
 
 $dd = $_GET['daily_date'] ?? date('Y-m-d');
 
 $s = $pdo->prepare("
-    SELECT 
-        COUNT(*) c,
-        COALESCE(SUM(total),0) total
-    FROM bills
-    WHERE date(created_at)=?
+    SELECT COUNT(*) c, COALESCE(SUM(total),0) total
+    FROM bills WHERE date(created_at)=?
 ");
-
 $s->execute([$dd]);
 $daily = $s->fetch();
-
-
-/* Monthly report */
 
 $mm = $_GET['report_month'] ?? date('Y-m');
 
 $s = $pdo->prepare("
-    SELECT
-        COUNT(*) c,
-        COALESCE(SUM(total),0) total,
-        COALESCE(SUM(discount_amount),0) discount,
-        COALESCE(SUM(gst_amount),0) gst
+    SELECT COUNT(*) c,
+           COALESCE(SUM(total),0) total,
+           COALESCE(SUM(discount_amount),0) discount,
+           COALESCE(SUM(gst_amount),0) gst
     FROM bills
     WHERE strftime('%Y-%m',created_at)=?
 ");
-
 $s->execute([$mm]);
 $monthly = $s->fetch();
 
-
-/* Custom date range */
-
 $from = $_GET['from_date'] ?? date('Y-m-01');
-$to   = $_GET['to_date'] ?? date('Y-m-d');
-
+$to = $_GET['to_date'] ?? date('Y-m-d');
 $range = null;
 
 if (
@@ -122,41 +103,31 @@ if (
     $from <= $to
 ) {
     $s = $pdo->prepare("
-        SELECT
-            COUNT(*) c,
-            COALESCE(SUM(subtotal),0) subtotal,
-            COALESCE(SUM(discount_amount),0) discount,
-            COALESCE(SUM(gst_amount),0) gst,
-            COALESCE(SUM(total),0) total
+        SELECT COUNT(*) c,
+               COALESCE(SUM(subtotal),0) subtotal,
+               COALESCE(SUM(discount_amount),0) discount,
+               COALESCE(SUM(gst_amount),0) gst,
+               COALESCE(SUM(total),0) total
         FROM bills
         WHERE date(created_at) BETWEEN ? AND ?
     ");
-
     $s->execute([$from, $to]);
     $range = $s->fetch();
 }
 
-
-/* Best selling products */
-
 $best = $pdo->query("
-    SELECT
-        product_name,
-        SUM(quantity) qty,
-        SUM(amount) sales
+    SELECT product_name,
+           SUM(quantity) qty,
+           SUM(amount) sales
     FROM bill_items
     GROUP BY product_id, product_name
     ORDER BY qty DESC, sales DESC
     LIMIT 8
 ")->fetchAll();
 
-
-/* Last 7 days */
-
 $dailyChart = $pdo->query("
-    SELECT
-        date(created_at) d,
-        COALESCE(SUM(total),0) total
+    SELECT date(created_at) d,
+           COALESCE(SUM(total),0) total
     FROM bills
     WHERE date(created_at) >= date('now','localtime','-6 days')
     GROUP BY date(created_at)
@@ -164,35 +135,21 @@ $dailyChart = $pdo->query("
 ")->fetchAll();
 
 $maxChart = 1;
-
 foreach ($dailyChart as $r) {
     $maxChart = max($maxChart, (float)$r['total']);
 }
 
-
-/* Recent bills */
-
 $recentBills = $pdo->query("
-    SELECT
-        b.*,
-        c.name customer_name,
-        c.phone
+    SELECT b.*, c.name customer_name, c.phone
     FROM bills b
     JOIN customers c ON c.id=b.customer_id
     ORDER BY b.id DESC
     LIMIT 5
 ")->fetchAll();
 
-
-/* Module */
-
 $validSections = [
-    'dashboard',
-    'billing',
-    'products',
-    'bills',
-    'reports',
-    'customers'
+    'dashboard', 'billing', 'products',
+    'bills', 'reports', 'customers'
 ];
 
 $activeSection = $_GET['section'] ?? 'dashboard';
@@ -202,1243 +159,442 @@ if (!in_array($activeSection, $validSections, true)) {
 }
 ?>
 
-<!doctype html>
-
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Billing System</title>
 
-<meta charset="utf-8">
-
-<meta name="viewport"
-      content="width=device-width,initial-scale=1">
-
-<title>PHP SQLite Billing System</title>
-
-<link rel="stylesheet"
-      href="assets/style.css">
-
+<!-- Load root folder CSS -->
+<link rel="stylesheet" href="style.css?v=5">
 </head>
-
 
 <body data-active-section="<?=e($activeSection)?>">
 
-
 <header>
-
-<h1>Product Billing System</h1>
-
-<p>
-PHP + SQLite • Products • Bills • Stock • Sales Reports
-</p>
-
+    <h1>Product Billing System</h1>
+    <p>PHP + SQLite | Products | Bills | Stock | Sales Reports</p>
 </header>
-
 
 <main class="wrap">
 
-
-<!-- MODULE NAVIGATION -->
-
 <nav class="module-nav">
-
-<a class="module-link"
-   data-section="dashboard"
-   href="#dashboard">
-
-📊 Dashboard
-
-</a>
-
-
-<a class="module-link"
-   data-section="billing"
-   href="#billing">
-
-🧾 New Bill
-
-</a>
-
-
-<a class="module-link"
-   data-section="products"
-   href="#products">
-
-📦 Products & Stock
-
-</a>
-
-
-<a class="module-link"
-   data-section="bills"
-   href="#bills">
-
-🧾 Bills / History
-
-</a>
-
-
-<a class="module-link"
-   data-section="reports"
-   href="#reports">
-
-📈 Sales Reports
-
-</a>
-
-
-<a class="module-link"
-   data-section="customers"
-   href="#customers">
-
-👤 Customers
-
-</a>
-
+    <?php
+    $modules = [
+        'dashboard' => '📊 Dashboard',
+        'billing' => '🧾 New Bill',
+        'products' => '📦 Products & Stock',
+        'bills' => '🧾 Bills / History',
+        'reports' => '📈 Sales Reports',
+        'customers' => '👤 Customers'
+    ];
+    foreach ($modules as $key => $label):
+    ?>
+        <a class="module-link <?= $activeSection === $key ? 'active' : '' ?>"
+           data-section="<?=$key?>"
+           href="?section=<?=$key?>">
+            <?=$label?>
+        </a>
+    <?php endforeach; ?>
 </nav>
 
-
-
-<!-- ================= DASHBOARD ================= -->
-
-<section id="dashboard"
-         class="module-section dashboard card">
+<!-- DASHBOARD -->
+<section id="dashboard" class="module-section card">
 
 <h2>📊 Dashboard</h2>
 
-
 <div class="statgrid">
-
-
-<div class="stat">
-
-Today's Sales
-
-<b><?=money($todaySales)?></b>
-
+    <div class="stat">Today's Sales
+        <b><?=money($todaySales)?></b>
+    </div>
+    <div class="stat">This Month
+        <b><?=money($monthSales)?></b>
+    </div>
+    <div class="stat">Total Bills
+        <b><?=$totalBills?></b>
+    </div>
+    <div class="stat">Products
+        <b><?=$totalProducts?></b>
+    </div>
+    <div class="stat warning">Low Stock
+        <b><?=$lowStock?></b>
+    </div>
+    <div class="stat dangerstat">Out of Stock
+        <b><?=$outStock?></b>
+    </div>
 </div>
-
-
-<div class="stat">
-
-This Month
-
-<b><?=money($monthSales)?></b>
-
-</div>
-
-
-<div class="stat">
-
-Total Bills
-
-<b><?=$totalBills?></b>
-
-</div>
-
-
-<div class="stat">
-
-Products
-
-<b><?=$totalProducts?></b>
-
-</div>
-
-
-<div class="stat warning">
-
-Low Stock
-
-<b><?=$lowStock?></b>
-
-</div>
-
-
-<div class="stat dangerstat">
-
-Out of Stock
-
-<b><?=$outStock?></b>
-
-</div>
-
-</div>
-
-
-
-<!-- PERMANENT BILL HISTORY -->
 
 <div class="history-preview">
+    <div class="history-head">
+        <h3>🧾 Recent Bill History</h3>
+        <button type="button" class="btn light"
+                onclick="showModule('bills')">
+            View All Bills
+        </button>
+    </div>
 
-<div class="history-head">
+    <table>
+        <tr>
+            <th>Bill No.</th>
+            <th>Customer</th>
+            <th>Date</th>
+            <th class="num">Total</th>
+            <th class="num">Action</th>
+        </tr>
 
-<h3>🧾 Recent Bill History</h3>
+        <?php if (!$recentBills): ?>
+        <tr><td colspan="5" class="empty">No bills generated yet.</td></tr>
+        <?php endif; ?>
 
-<button
-    type="button"
-    class="btn light"
-    onclick="showModule('bills')">
-
-View All Bills
-
-</button>
-
+        <?php foreach ($recentBills as $rb): ?>
+        <tr>
+            <td><?=e($rb['bill_number'])?></td>
+            <td><?=e($rb['customer_name'])?></td>
+            <td><?=e($rb['created_at'])?></td>
+            <td class="num"><?=money((float)$rb['total'])?></td>
+            <td class="num">
+                <a class="btn light" href="view_bill.php?id=<?=$rb['id']?>">View</a>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+    </table>
 </div>
-
-
-<table>
-
-<tr>
-
-<th>Bill No.</th>
-
-<th>Customer</th>
-
-<th>Date</th>
-
-<th class="num">Total</th>
-
-<th class="num">Action</th>
-
-</tr>
-
-
-<?php if (!$recentBills): ?>
-
-<tr>
-
-<td colspan="5"
-    class="empty">
-
-No bills generated yet.
-Your saved bills will appear here automatically.
-
-</td>
-
-</tr>
-
-<?php endif; ?>
-
-
-<?php foreach ($recentBills as $rb): ?>
-
-<tr>
-
-<td>
-<?=e($rb['bill_number'])?>
-</td>
-
-<td>
-<?=e($rb['customer_name'])?>
-</td>
-
-<td>
-<?=e($rb['created_at'])?>
-</td>
-
-<td class="num">
-<?=money((float)$rb['total'])?>
-</td>
-
-<td class="num">
-
-<a
-    class="btn light"
-    href="view_bill.php?id=<?=$rb['id']?>">
-
-View
-
-</a>
-
-</td>
-
-</tr>
-
-<?php endforeach; ?>
-
-</table>
-
-</div>
-
 </section>
 
-
-
-<!-- ================= NEW BILL ================= -->
-
-<section id="billing"
-         class="module-section card">
-
+<!-- NEW BILL -->
+<section id="billing" class="module-section card">
 <h2>Create New Bill</h2>
 
-
-<form
-    method="post"
-    action="save_bill.php"
-    id="billForm">
-
+<form method="post" action="save_bill.php" id="billForm">
 
 <div class="grid">
+    <div>
+        <label>Customer Name</label>
+        <input name="customer_name" required>
+    </div>
 
+    <div>
+        <label>Phone Number</label>
+        <input name="phone" maxlength="10" pattern="[0-9]{10}" required>
+    </div>
 
-<div>
+    <div>
+        <label>Product</label>
+        <select id="productSelect">
+            <option value="">-- Select Product --</option>
+            <?php foreach ($products as $p): ?>
+            <option value="<?=$p['id']?>"
+                data-price="<?=$p['price']?>"
+                data-stock="<?=$p['stock_quantity']?>"
+                <?=((int)$p['stock_quantity']===0?'disabled':'')?>>
+                <?=e($p['name'])?> -
+                <?=money((float)$p['price'])?>
+                (Stock: <?=$p['stock_quantity']?>)
+            </option>
+            <?php endforeach; ?>
+        </select>
+    </div>
 
-<label>Customer Name</label>
-
-<input
-    name="customer_name"
-    required>
-
+    <div>
+        <label>Quantity</label>
+        <input id="qty" type="number" min="1" value="1">
+    </div>
 </div>
-
-
-<div>
-
-<label>Phone Number</label>
-
-<input
-    name="phone"
-    maxlength="10"
-    pattern="[0-9]{10}"
-    required>
-
-</div>
-
-
-<div>
-
-<label>Product</label>
-
-<select id="productSelect">
-
-<option value="">
--- Select Product --
-</option>
-
-
-<?php foreach ($products as $p): ?>
-
-<option
-    value="<?=$p['id']?>"
-    data-price="<?=$p['price']?>"
-    data-stock="<?=$p['stock_quantity']?>"
-    <?=((int)$p['stock_quantity']===0?'disabled':'')?>>
-
-<?=e($p['name'])?>
--
-<?=money((float)$p['price'])?>
-(Stock: <?=$p['stock_quantity']?>)
-
-</option>
-
-<?php endforeach; ?>
-
-</select>
-
-</div>
-
-
-<div>
-
-<label>Quantity</label>
-
-<input
-    id="qty"
-    type="number"
-    min="1"
-    value="1">
-
-</div>
-
-</div>
-
-
 
 <div class="actions">
-
-<button
-    type="button"
-    class="btn primary"
-    onclick="addItem()">
-
-+ Add Product
-
-</button>
-
-
-<button
-    type="button"
-    class="btn light"
-    onclick="clearCart()">
-
-Clear
-
-</button>
-
+    <button type="button" class="btn primary" onclick="addItem()">+ Add Product</button>
+    <button type="button" class="btn light" onclick="clearCart()">Clear</button>
 </div>
 
+<div id="cart"><div class="empty">No products added.</div></div>
 
-<div id="cart">
-
-<div class="empty">
-No products added.
-</div>
-
-</div>
-
-
-<input
-    type="hidden"
-    name="items"
-    id="items">
-
+<input type="hidden" name="items" id="items">
 
 <div class="grid">
-
-
-<div>
-
-<label>Discount (%)</label>
-
-<input
-    name="discount"
-    id="discount"
-    type="number"
-    min="0"
-    max="100"
-    value="0"
-    step=".01"
-    oninput="renderCart()">
-
+    <div>
+        <label>Discount (%)</label>
+        <input name="discount" id="discount" type="number"
+               min="0" max="100" value="0" step=".01"
+               oninput="renderCart()">
+    </div>
+    <div>
+        <label>GST (%)</label>
+        <input name="gst" id="gst" type="number"
+               min="0" max="100" value="18" step=".01"
+               oninput="renderCart()">
+    </div>
 </div>
 
-
-<div>
-
-<label>GST (%)</label>
-
-<input
-    name="gst"
-    id="gst"
-    type="number"
-    min="0"
-    max="100"
-    value="18"
-    step=".01"
-    oninput="renderCart()">
-
-</div>
-
-</div>
-
-
-<div
-    id="totals"
-    class="totalbox">
-</div>
-
+<div id="totals" class="totalbox"></div>
 
 <div class="actions">
-
-<button
-    class="btn primary"
-    onclick="return prepareSubmit()">
-
-Save Bill
-
-</button>
-
+    <button class="btn primary" onclick="return prepareSubmit()">Save Bill</button>
 </div>
-
 
 </form>
-
 </section>
 
-
-
-<!-- ================= PRODUCTS ================= -->
-
-<section id="products"
-         class="module-section card">
-
+<!-- PRODUCTS -->
+<section id="products" class="module-section card">
 <h2>📦 Product Management & Stock</h2>
 
+<form method="post" action="product_action.php" class="grid four">
+    <input type="hidden" name="action" value="add">
 
-<form
-    method="post"
-    action="product_action.php"
-    class="grid four">
-
-
-<input
-    type="hidden"
-    name="action"
-    value="add">
-
-
-<div>
-
-<label>Product Name</label>
-
-<input
-    name="name"
-    required>
-
-</div>
-
-
-<div>
-
-<label>Price (₹)</label>
-
-<input
-    name="price"
-    type="number"
-    min="0"
-    step=".01"
-    required>
-
-</div>
-
-
-<div>
-
-<label>Stock Quantity</label>
-
-<input
-    name="stock_quantity"
-    type="number"
-    min="0"
-    value="0"
-    required>
-
-</div>
-
-
-<div>
-
-<label>Low Stock Alert At</label>
-
-<input
-    name="low_stock_threshold"
-    type="number"
-    min="0"
-    value="5"
-    required>
-
-</div>
-
-
-<div>
-
-<button class="btn primary">
-
-Add Product
-
-</button>
-
-</div>
-
+    <div>
+        <label>Product Name</label>
+        <input name="name" required>
+    </div>
+    <div>
+        <label>Price (₹)</label>
+        <input name="price" type="number" min="0" step=".01" required>
+    </div>
+    <div>
+        <label>Stock Quantity</label>
+        <input name="stock_quantity" type="number" min="0" value="0" required>
+    </div>
+    <div>
+        <label>Low Stock Alert At</label>
+        <input name="low_stock_threshold" type="number" min="0" value="5" required>
+    </div>
+    <div>
+        <button class="btn primary">Add Product</button>
+    </div>
 </form>
 
-
-
 <table>
-
 <tr>
-
-<th>Product</th>
-
-<th class="num">Price</th>
-
-<th class="num">Stock</th>
-
-<th>Status</th>
-
-<th class="num">Action</th>
-
+    <th>Product</th>
+    <th class="num">Price</th>
+    <th class="num">Stock</th>
+    <th>Status</th>
+    <th class="num">Action</th>
 </tr>
-
 
 <?php foreach ($products as $p):
-
-$stock = (int)$p['stock_quantity'];
-
-$status =
-    $stock === 0
-    ? '<span class="badge out">Out of Stock</span>'
-    : (
-        $stock <= (int)$p['low_stock_threshold']
-        ? '<span class="badge low">Low Stock</span>'
-        : '<span class="badge ok">In Stock</span>'
-    );
-
+    $stock = (int)$p['stock_quantity'];
+    if ($stock === 0) {
+        $status = '<span class="badge out">Out of Stock</span>';
+    } elseif ($stock <= (int)$p['low_stock_threshold']) {
+        $status = '<span class="badge low">Low Stock</span>';
+    } else {
+        $status = '<span class="badge ok">In Stock</span>';
+    }
 ?>
-
-
 <tr>
-
-<td>
-<?=e($p['name'])?>
-</td>
-
-
-<td class="num">
-<?=money((float)$p['price'])?>
-</td>
-
-
-<td class="num">
-
-<b><?=$stock?></b>
-
-</td>
-
-
-<td>
-<?=$status?>
-</td>
-
-
-<td class="num">
-
-
-<a
-    class="btn light"
-    href="edit_product.php?id=<?=$p['id']?>">
-
-Edit / Restock
-
-</a>
-
-
-<form
-    class="inline"
-    method="post"
-    action="product_action.php"
-    onsubmit="return confirm('Delete this product?')">
-
-
-<input
-    type="hidden"
-    name="action"
-    value="delete">
-
-
-<input
-    type="hidden"
-    name="id"
-    value="<?=$p['id']?>">
-
-
-<button class="btn danger">
-
-Delete
-
-</button>
-
-
-</form>
-
-</td>
-
+    <td><?=e($p['name'])?></td>
+    <td class="num"><?=money((float)$p['price'])?></td>
+    <td class="num"><b><?=$stock?></b></td>
+    <td><?=$status?></td>
+    <td class="num">
+        <a class="btn light" href="edit_product.php?id=<?=$p['id']?>">Edit / Restock</a>
+        <form class="inline" method="post" action="product_action.php"
+              onsubmit="return confirm('Delete this product?')">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="<?=$p['id']?>">
+            <button class="btn danger">Delete</button>
+        </form>
+    </td>
 </tr>
-
 <?php endforeach; ?>
-
 </table>
-
 </section>
 
-
-
-<!-- ================= BILLS ================= -->
-
-<section id="bills"
-         class="module-section card">
-
+<!-- BILLS HISTORY -->
+<section id="bills" class="module-section card">
 <h2>🧾 Saved Bills & Permanent History</h2>
 
-
-<form>
-
-<input
-    type="hidden"
-    name="section"
-    value="bills">
-
-
-<input
-    name="bill_search"
-    value="<?=e($q)?>"
-    placeholder="Search bill number, customer or phone...">
-
-
-<button class="btn primary">
-
-Search
-
-</button>
-
+<form method="get">
+    <input type="hidden" name="section" value="bills">
+    <input name="bill_search" value="<?=e($q)?>"
+           placeholder="Search bill number, customer or phone...">
+    <button class="btn primary">Search</button>
 </form>
 
-
-
 <table>
-
 <tr>
-
-<th>Bill No.</th>
-
-<th>Customer</th>
-
-<th>Date</th>
-
-<th class="num">Total</th>
-
-<th class="num">Action</th>
-
+    <th>Bill No.</th>
+    <th>Customer</th>
+    <th>Date</th>
+    <th class="num">Total</th>
+    <th class="num">Action</th>
 </tr>
-
 
 <?php if (!$bills): ?>
-
-<tr>
-
-<td colspan="5"
-    class="empty">
-
-No bills found.
-
-</td>
-
-</tr>
-
+<tr><td colspan="5" class="empty">No bills found.</td></tr>
 <?php endif; ?>
-
 
 <?php foreach ($bills as $b): ?>
-
 <tr>
-
-<td>
-<?=e($b['bill_number'])?>
-</td>
-
-
-<td>
-
-<?=e($b['customer_name'])?>
-
-<br>
-
-<small>
-<?=e($b['phone'])?>
-</small>
-
-</td>
-
-
-<td>
-<?=e($b['created_at'])?>
-</td>
-
-
-<td class="num">
-<?=money((float)$b['total'])?>
-</td>
-
-
-<td class="num">
-
-
-<a
-    class="btn light"
-    href="view_bill.php?id=<?=$b['id']?>">
-
-View
-
-</a>
-
-
-<form
-    class="inline"
-    method="post"
-    action="delete_bill.php"
-    onsubmit="return confirm('Delete this bill? Stock will be restored.')">
-
-
-<input
-    type="hidden"
-    name="id"
-    value="<?=$b['id']?>">
-
-
-<button class="btn danger">
-
-Delete
-
-</button>
-
-</form>
-
-</td>
-
+    <td><?=e($b['bill_number'])?></td>
+    <td><?=e($b['customer_name'])?><br><small><?=e($b['phone'])?></small></td>
+    <td><?=e($b['created_at'])?></td>
+    <td class="num"><?=money((float)$b['total'])?></td>
+    <td class="num">
+        <a class="btn light" href="view_bill.php?id=<?=$b['id']?>">View</a>
+        <form class="inline" method="post" action="delete_bill.php"
+              onsubmit="return confirm('Delete this bill? Stock will be restored.')">
+            <input type="hidden" name="id" value="<?=$b['id']?>">
+            <button class="btn danger">Delete</button>
+        </form>
+    </td>
 </tr>
-
 <?php endforeach; ?>
-
 </table>
-
 </section>
 
-
-
-<!-- ================= REPORTS ================= -->
-
-<section id="reports"
-         class="module-section card">
-
+<!-- REPORTS -->
+<section id="reports" class="module-section card">
 <h2>📊 Sales Dashboard & Reports</h2>
 
-
 <div class="report-summary">
-
-
-<div>
-
-<b>All-Time Sales</b>
-
-<strong>
-<?=money($totalSales)?>
-</strong>
-
+    <div><b>All-Time Sales</b><strong><?=money($totalSales)?></strong></div>
+    <div><b>Selected Month</b><strong><?=money((float)$monthly['total'])?></strong></div>
+    <div><b>Selected Day</b><strong><?=money((float)$daily['total'])?></strong></div>
 </div>
-
-
-<div>
-
-<b>Selected Month</b>
-
-<strong>
-<?=money((float)$monthly['total'])?>
-</strong>
-
-</div>
-
-
-<div>
-
-<b>Selected Day</b>
-
-<strong>
-<?=money((float)$daily['total'])?>
-</strong>
-
-</div>
-
-</div>
-
-
 
 <div class="grid">
-
-
-<form>
-
-<input
-    type="hidden"
-    name="section"
-    value="reports">
-
-<label>Daily Report</label>
-
-<input
-    type="date"
-    name="daily_date"
-    value="<?=e($dd)?>">
-
-<button class="btn primary">
-
-View
-
-</button>
-
-
-<p>
-
-Bills:
-<b><?=$daily['c']?></b>
-
-|
-
-Sales:
-<b><?=money((float)$daily['total'])?></b>
-
-</p>
-
+<form method="get">
+    <input type="hidden" name="section" value="reports">
+    <label>Daily Report</label>
+    <input type="date" name="daily_date" value="<?=e($dd)?>">
+    <button class="btn primary">View</button>
+    <p>Bills: <b><?=$daily['c']?></b> | Sales: <b><?=money((float)$daily['total'])?></b></p>
 </form>
 
-
-
-<form>
-
-<input
-    type="hidden"
-    name="section"
-    value="reports">
-
-<label>Monthly Report</label>
-
-<input
-    type="month"
-    name="report_month"
-    value="<?=e($mm)?>">
-
-<button class="btn primary">
-
-View
-
-</button>
-
-
-<p>
-
-Bills:
-<b><?=$monthly['c']?></b>
-
-|
-
-Sales:
-<b><?=money((float)$monthly['total'])?></b>
-
-</p>
-
+<form method="get">
+    <input type="hidden" name="section" value="reports">
+    <label>Monthly Report</label>
+    <input type="month" name="report_month" value="<?=e($mm)?>">
+    <button class="btn primary">View</button>
+    <p>Bills: <b><?=$monthly['c']?></b> | Sales: <b><?=money((float)$monthly['total'])?></b></p>
 </form>
-
 </div>
-
-
 
 <div class="card inner">
-
 <h3>Custom Date Range</h3>
-
-
-<form class="grid">
-
-<input
-    type="hidden"
-    name="section"
-    value="reports">
-
-
-<div>
-
-<label>From</label>
-
-<input
-    type="date"
-    name="from_date"
-    value="<?=e($from)?>">
-
-</div>
-
-
-<div>
-
-<label>To</label>
-
-<input
-    type="date"
-    name="to_date"
-    value="<?=e($to)?>">
-
-</div>
-
-
-<div>
-
-<button class="btn primary">
-
-Generate Report
-
-</button>
-
-</div>
-
+<form method="get" class="grid">
+    <input type="hidden" name="section" value="reports">
+    <div><label>From</label><input type="date" name="from_date" value="<?=e($from)?>"></div>
+    <div><label>To</label><input type="date" name="to_date" value="<?=e($to)?>"></div>
+    <div><button class="btn primary">Generate Report</button></div>
 </form>
-
-
 
 <?php if ($range): ?>
-
-<div class="report-table">
-
 <table>
-
+<tr><th>Bills</th><th>Gross Sales</th><th>Discount</th><th>GST</th><th>Net Sales</th></tr>
 <tr>
-
-<th>Bills</th>
-
-<th>Gross Sales</th>
-
-<th>Discount</th>
-
-<th>GST</th>
-
-<th>Net Sales</th>
-
+    <td><?=$range['c']?></td>
+    <td><?=money((float)$range['subtotal'])?></td>
+    <td><?=money((float)$range['discount'])?></td>
+    <td><?=money((float)$range['gst'])?></td>
+    <td><b><?=money((float)$range['total'])?></b></td>
 </tr>
-
-
-<tr>
-
-<td>
-<?=$range['c']?>
-</td>
-
-<td>
-<?=money((float)$range['subtotal'])?>
-</td>
-
-<td>
-<?=money((float)$range['discount'])?>
-</td>
-
-<td>
-<?=money((float)$range['gst'])?>
-</td>
-
-<td>
-
-<b>
-<?=money((float)$range['total'])?>
-</b>
-
-</td>
-
-</tr>
-
 </table>
-
-
-<button
-    type="button"
-    class="btn light no-print"
-    onclick="window.print()">
-
-🖨 Print Report
-
-</button>
-
-</div>
-
+<button type="button" class="btn light no-print" onclick="window.print()">🖨 Print Report</button>
 <?php endif; ?>
-
 </div>
-
-
 
 <div class="grid charts">
-
-
 <div class="card inner">
-
 <h3>Last 7 Days Sales</h3>
-
-
 <div class="bars">
-
-
 <?php foreach ($dailyChart as $r):
-
-$h = round(
-    ((float)$r['total'] / $maxChart) * 100
-);
-
+    $h = round(((float)$r['total'] / $maxChart) * 100);
 ?>
-
-
 <div class="barwrap">
-
-<div
-    class="bar"
-    style="height:<?=$h?>%"
-    title="<?=money((float)$r['total'])?>">
-
+    <div class="bar" style="height:<?=$h?>%" title="<?=money((float)$r['total'])?>"></div>
+    <small><?=date('d M',strtotime($r['d']))?></small>
 </div>
-
-
-<small>
-
-<?=date('d M',strtotime($r['d']))?>
-
-</small>
-
-</div>
-
-
 <?php endforeach; ?>
-
-
-<?php if (!$dailyChart): ?>
-
-<div class="empty">
-
-No sales data yet.
-
+<?php if (!$dailyChart): ?><div class="empty">No sales data yet.</div><?php endif; ?>
 </div>
-
-<?php endif; ?>
-
 </div>
-
-</div>
-
-
 
 <div class="card inner">
-
 <h3>Best-Selling Products</h3>
-
-
 <table>
-
-<tr>
-
-<th>Product</th>
-
-<th class="num">Qty Sold</th>
-
-<th class="num">Sales</th>
-
-</tr>
-
-
+<tr><th>Product</th><th class="num">Qty Sold</th><th class="num">Sales</th></tr>
 <?php foreach ($best as $r): ?>
-
 <tr>
-
-<td>
-<?=e($r['product_name'])?>
-</td>
-
-<td class="num">
-<?=$r['qty']?>
-</td>
-
-<td class="num">
-<?=money((float)$r['sales'])?>
-</td>
-
+    <td><?=e($r['product_name'])?></td>
+    <td class="num"><?=$r['qty']?></td>
+    <td class="num"><?=money((float)$r['sales'])?></td>
 </tr>
-
 <?php endforeach; ?>
-
-
-<?php if (!$best): ?>
-
-<tr>
-
-<td
-    colspan="3"
-    class="empty">
-
-No sales data yet.
-
-</td>
-
-</tr>
-
-<?php endif; ?>
-
+<?php if (!$best): ?><tr><td colspan="3" class="empty">No sales data yet.</td></tr><?php endif; ?>
 </table>
-
 </div>
-
 </div>
-
 </section>
 
-
-
-<!-- ================= CUSTOMERS ================= -->
-
-<section id="customers"
-         class="module-section card">
-
+<!-- CUSTOMERS -->
+<section id="customers" class="module-section card">
 <h2>👤 Customer History</h2>
 
-
 <table>
-
-<tr>
-
-<th>Customer</th>
-
-<th>Phone</th>
-
-<th class="num">Bills</th>
-
-<th class="num">Total Purchase</th>
-
-</tr>
-
-
+<tr><th>Customer</th><th>Phone</th><th class="num">Bills</th><th class="num">Total Purchase</th></tr>
 <?php if (!$customers): ?>
-
-<tr>
-
-<td
-    colspan="4"
-    class="empty">
-
-No customer history yet.
-
-</td>
-
-</tr>
-
+<tr><td colspan="4" class="empty">No customer history yet.</td></tr>
 <?php endif; ?>
-
-
 <?php foreach ($customers as $c): ?>
-
 <tr>
-
-<td>
-<?=e($c['name'])?>
-</td>
-
-<td>
-<?=e($c['phone'])?>
-</td>
-
-<td class="num">
-<?=$c['bill_count']?>
-</td>
-
-<td class="num">
-<?=money((float)$c['total_purchase'])?>
-</td>
-
+    <td><?=e($c['name'])?></td>
+    <td><?=e($c['phone'])?></td>
+    <td class="num"><?=$c['bill_count']?></td>
+    <td class="num"><?=money((float)$c['total_purchase'])?></td>
 </tr>
-
 <?php endforeach; ?>
-
 </table>
-
 </section>
-
 
 </main>
 
-
 <script src="assets/app.js"></script>
 
-</body>
+<!-- Fallback module navigation; works even if app.js is missing module switching -->
+<script>
+(function () {
+    function activateModule(section, updateUrl) {
+        const valid = ['dashboard','billing','products','bills','reports','customers'];
+        if (!valid.includes(section)) section = 'dashboard';
 
+        document.querySelectorAll('.module-section').forEach(el => {
+            el.classList.toggle('active-module', el.id === section);
+        });
+
+        document.querySelectorAll('.module-link').forEach(el => {
+            const active = el.dataset.section === section;
+            el.classList.toggle('active', active);
+            el.setAttribute('aria-current', active ? 'page' : 'false');
+        });
+
+        if (updateUrl) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('section', section);
+            history.replaceState({}, '', url);
+        }
+    }
+
+    document.querySelectorAll('.module-link').forEach(link => {
+        link.addEventListener('click', function (event) {
+            event.preventDefault();
+            activateModule(this.dataset.section, true);
+        });
+    });
+
+    window.showModule = function (section) {
+        activateModule(section, true);
+    };
+
+    const initial = new URLSearchParams(window.location.search).get('section')
+        || document.body.dataset.activeSection
+        || 'dashboard';
+
+    activateModule(initial, false);
+})();
+</script>
+
+</body>
 </html>
